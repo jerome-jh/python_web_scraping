@@ -137,7 +137,6 @@ if __name__ == '__main__':
     base_url = sys.argv[1]
     if base_url[-1] != '/':
         base_url += '/'
-    'http://www.radars-auto.com/'
 
     ## fetch departement list
     departements = get_departements()
