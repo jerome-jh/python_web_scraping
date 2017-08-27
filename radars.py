@@ -6,8 +6,13 @@ import sys
 import copy
 import requests
 from bs4 import BeautifulSoup
+import dict_object
 
 cache_dir = 'cache'
+all_pictos = set()
+
+class Radar(dict_object.DictObject):
+    pass
 
 def get_scripts_no_src(soup):
     r = list()
@@ -40,7 +45,33 @@ def download(path):
         f.close()
         return html.content
 
-
+def parse_picto(radar, url):
+    ## Cache regex
+    global picto_reg, type_reg
+    try:
+        picto_reg
+    except NameError:
+        ## Split: path, name., extension
+        picto_reg = re.compile(r'(.*/)*(.+\.)+(\w{3,4})')
+    m = picto_reg.match(url)
+    #print(m.groups())
+    if m:
+        name = m.group(2)
+    else:
+        print(url, 'not recognized')
+    try:
+        type_reg
+    except NameError:
+        type_reg = re.compile(r'picto-vitesse-(?P<speed>\d*)\.|picto-radar-(?P<fixed>\w*gen\w*)\.|picto-radar-(?P<redlight>\w*feu\w*)\.|picto-radar-(?P<fake>\w*(pedago|leurre)\w*)\.|picto-radar-(?P<gate>[-\w]*niveau[-\w]*)\.|picto-radar-(?P<section>\w*troncon\w*)\.')
+    m = type_reg.match(name)
+    radar.type = m.lastgroup
+    if radar.type == 'speed':
+        if len(m.group(1)):
+            radar.speed = int(m.group(1))
+    ## set speed anyway for all types
+    radar.speed = 0
+    #print(radar)
+                
 def parse_departement(departement):
     html = download('emplacements/' + departement)
     soup = BeautifulSoup(html, "lxml")
@@ -76,12 +107,27 @@ def parse_departement(departement):
     for s in scripts:
         m = reg.search(s.text)
         if m:
-            radars.extend(eval(m.group(1)))
+            rads = eval(m.group(1))
+            for r in rads:
+                rad = Radar(['name', 'lat', 'lon', 'picto', 'html'], r)
+                radars.append(rad)
     
-    ## radars is a list of list
     print('Radars', len(radars))
+    #print(radars[0])
+
     #for r in radars:
     #    print(r[0])
+
+    for r in radars:
+        s = BeautifulSoup(r.html, "lxml")
+        imgs = s.find_all('img')
+        #print(imgs)
+        for i in imgs:
+            #print(i['src'])
+            all_pictos.add(i['src'])
+            parse_picto(r, i['src'])
+        #all_pictos.add(imgs[1]['src'])
+    #print(all_pictos)
     
     return image_urls, radars
 
@@ -115,10 +161,10 @@ def write_kml(radars):
     f.write("   <name>radars.kml</name>\n")
     for r in radars:
         f.write("   <Placemark>\n")
-        f.write("       <name>" + r[0] + "</name>\n")
+        f.write("       <name>" + r.name + "</name>\n")
         #f.write("       <description>" + r[4] + "</description>\n")
         f.write("       <Point>\n")
-        f.write("           <coordinates>" + str(r[2]) + "," + str(r[1]) + "</coordinates>\n")
+        f.write("           <coordinates>" + str(r.lon) + "," + str(r.lat) + "</coordinates>\n")
         f.write("       </Point>\n")
         f.write("   </Placemark>\n")
     f.write("</Document>\n")
@@ -127,10 +173,17 @@ def write_kml(radars):
 
 def write_csv(radars):
     ## TODO: write speed
+    type_dict = {
+        'fixed': 1,
+        'redlight': 3,
+        'section': 4,
+        'gate': 6,
+        'fake': 0
+    }
     f = open('radars.csv', 'wt')
     f.write("X,Y,TYPE,SPEED,DIRTYPE,DIRECTION\n")
     for r in radars:
-        f.write(str(r[2]) + ',' + str(r[1]) + ',' + '1,50,0,0\n')
+        f.write(str(r.lon) + ',' + str(r.lat) + ',' + type_dict[r.type] + ',' + str(r.speed) + ',0,0\n')
     f.close()
 
 if __name__ == '__main__':
@@ -153,6 +206,7 @@ if __name__ == '__main__':
     print('Total images', len(images))
     print('Total radars', len(radars))
 
+    print(all_pictos)
     write_csv(radars)
     write_kml(radars)
 
