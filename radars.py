@@ -48,7 +48,7 @@ def parse_departement(departement):
 
     ## Find images
     images = list()
-    reg = re.compile(r'var\s+image\S+\s*=\s*\{.*?\}\s*;', re.DOTALL)
+    reg = re.compile(r'var\s+image1\S+\s*=\s*\{.*?\}\s*;', re.DOTALL)
     for s in scripts:
         m = reg.findall(s.text)
         if m:
@@ -58,8 +58,9 @@ def parse_departement(departement):
     #print(images)
 
     ## Define images as variables in order to parse radars
+    ## TODO: fix that
     image_urls = set()
-    reg = re.compile(r'var\s+(image\S+)\s*=\s*\{.*?url\s*:\s*\'(.*?)\'.*?\}\s*;', re.DOTALL)
+    reg = re.compile(r'var\s+(image1\S+)\s*=\s*\{.*?url\s*:\s*\'(.*?)\'.*?\}\s*;', re.DOTALL)
     for i in range(len(images)):
         m = reg.match(images[i])
         if m:
@@ -72,16 +73,18 @@ def parse_departement(departement):
    
     ## Find radars
     radars = list()
-    reg = re.compile(r'var\s+radars\s*=\s*(\[.*?\])\s*;', re.DOTALL)
+    reg = re.compile(r'L.marker\((\[.*\]),\s*{.*:(.*)}\s*\)\.addTo\(.*\)\.bindPopup\(.*\);')
     for s in scripts:
-        m = reg.search(s.text)
-        if m:
-            radars.extend(eval(m.group(1)))
+        for m in reg.finditer(s.text):
+            r = eval(m.group(1))
+            r.append(m.group(2).strip())
+            #print(r)
+            radars.append(r)
     
     ## radars is a list of list
     print('Radars', len(radars))
     #for r in radars:
-    #    print(r[0])
+    #    print(r)
     
     return image_urls, radars
 
@@ -115,10 +118,10 @@ def write_kml(radars):
     f.write("   <name>radars.kml</name>\n")
     for r in radars:
         f.write("   <Placemark>\n")
-        f.write("       <name>" + r[0] + "</name>\n")
+        f.write("       <name>" + r[2] + "</name>\n")
         #f.write("       <description>" + r[4] + "</description>\n")
         f.write("       <Point>\n")
-        f.write("           <coordinates>" + str(r[2]) + "," + str(r[1]) + "</coordinates>\n")
+        f.write("           <coordinates>" + str(r[1]) + "," + str(r[0]) + "</coordinates>\n")
         f.write("       </Point>\n")
         f.write("   </Placemark>\n")
     f.write("</Document>\n")
@@ -130,13 +133,16 @@ def write_csv(radars):
     f = open('radars.csv', 'wt')
     f.write("X,Y,TYPE,SPEED,DIRTYPE,DIRECTION\n")
     for r in radars:
-        f.write(str(r[2]) + ',' + str(r[1]) + ',' + '1,50,0,0\n')
+        f.write(str(r[1]) + ',' + str(r[0]) + ',' + '1,50,0,0\n')
     f.close()
 
 if __name__ == '__main__':
-    base_url = sys.argv[1]
-    if base_url[-1] != '/':
-        base_url += '/'
+    try:
+        base_url = sys.argv[1]
+        if base_url[-1] != '/':
+            base_url += '/'
+    except IndexError:
+        base_url = 'https://www.radars-auto.com/'
 
     ## fetch departement list
     departements = get_departements()
